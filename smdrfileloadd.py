@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
-import sys, time, ConfigParser
+import sys, os, time, ConfigParser
 from daemon import Daemon
 from socket import *                                    # get socket constructor and constants
+from datetime import datetime
 
 class MyDaemon(Daemon):
     def run(self):
@@ -15,17 +16,22 @@ class MyDaemon(Daemon):
             listenport = config.getint('SMDRConfig', 'listenport')
             recvbuff = config.getint('SMDRConfig', 'recvbuff')
             logfile = config.get('SMDRConfig', 'logfile')
+            logdir = config.get('SMDRConfig', 'logdir')
+            archlogdir = config.get('SMDRConfig', 'archlogdir')
         except:
             print "Check the configuration file " + orbconffile
             listenif = ''
             listenport = 9910
             recvbuff = 1
-            logfile = '/var/log/avaya/smdr.log'
+            logfile = 'smdr.log'
+            logdir = '/var/log/avaya/'
+            archlogdir = '/var/log/avaya_arch_logs/'
 
-        smdrrecord = []
-        smdrcolumn = ''
-
-        smdrlog = open(logfile, 'a')
+        curhour = datetime.now().strftime('%H')
+        curday = datetime.now().strftime('%w')
+        curweek = datetime.now().strftime('%W')
+        logtempfile = logfile + '.' + curweek + '.' + curday + '.' + curhour
+        smdrlog = open(logdir + logtempfile, 'a')
 
         listensock = socket(AF_INET, SOCK_STREAM)                  # make a TCP socket object
         listensock.bind((listenif, listenport))                    # bind it to server port number
@@ -37,14 +43,14 @@ class MyDaemon(Daemon):
                 smdrdata = avcon.recv(recvbuff)
                 if not smdrdata: 
                     break
-                if smdrdata in (',','\r'):
-                    smdrrecord.append(smdrcolumn)
-                    smdrcolumn = ''
-                elif smdrdata == '\n':
-                    smdrrecord.pop(19)
-                    smdrrecord = []
-                else:
-                    smdrcolumn += smdrdata
+                if curhour != datetime.now().strftime('%H'):
+                    smdrlog.close()
+                    os.rename(logdir + logtempfile, archlogdir + logtempfile)
+                    curweek = datetime.now().strftime('%W')
+                    curhour = datetime.now().strftime('%H')
+                    curday = datetime.now().strftime('%w') 
+                    logtempfile = logfile + '.' + curweek + '.' + curday + '.' + curhour
+                    smdrlog = open(logdir + logtempfile, 'a') 
                 smdrlog.write(smdrdata)
                 smdrlog.flush()
         avcon.close()
